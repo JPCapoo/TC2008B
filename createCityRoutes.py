@@ -13,11 +13,11 @@ class Window:
 
         # Set default configurations
         self.set_default_config()
-        
+
         # Update configurations
         for attr, val in config.items():
             setattr(self, attr, val)
-        
+
     def set_default_config(self):
         """Set default configuration"""
         self.width = 600
@@ -32,13 +32,17 @@ class Window:
         self.mouse_down = False
 
         self.pos = 0
+        self.pos2 = -5
         self.step_size = 1/5
+        self.step_size2 = 1/5
         self.currentIndex = 0
+        self.currentIndex2 = 0
 
+        self.tfstate = [(0,0,0),(0,0,0)]
 
     def loop(self, loop=None):
         """Shows a window visualizing the simulation and runs the loop function."""
-        
+
         # Create a pygame window
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.flip()
@@ -54,7 +58,8 @@ class Window:
         running = True
         while running:
             # Update simulation
-            if loop: loop(self.sim)
+            if loop:
+                loop(self.sim)
 
             # Draw simulation
             self.draw()
@@ -69,7 +74,7 @@ class Window:
                 if event.type == pygame.QUIT:
                     running = False
         pygame.quit()
-        
+
     def run(self, steps_per_update=1):
         """Runs the simulation by updating in every loop."""
         def loop(sim):
@@ -97,7 +102,6 @@ class Window:
             int(-self.offset[0] + (x - self.width/2)/self.zoom),
             int(-self.offset[1] + (y - self.height/2)/self.zoom)
         )
-
 
     def background(self, r, g, b):
         """Fills screen with one color."""
@@ -137,30 +141,31 @@ class Window:
 
         if angle:
             cos, sin = np.cos(angle), np.sin(angle)
-        
-        vertex = lambda e1, e2: (
+
+        def vertex(e1, e2): return (
             x + (e1*l*cos + e2*h*sin)/2,
             y + (e1*l*sin - e2*h*cos)/2
         )
 
         if centered:
             vertices = self.convert(
-                [vertex(*e) for e in [(-1,-1), (-1, 1), (1,1), (1,-1)]]
+                [vertex(*e) for e in [(-1, -1), (-1, 1), (1, 1), (1, -1)]]
             )
         else:
             vertices = self.convert(
-                [vertex(*e) for e in [(0,-1), (0, 1), (2,1), (2,-1)]]
+                [vertex(*e) for e in [(0, -1), (0, 1), (2, 1), (2, -1)]]
             )
 
         self.polygon(vertices, color, filled=filled)
 
     def rotated_rect(self, pos, size, angle=None, cos=None, sin=None, centered=True, color=(0, 0, 255)):
-        self.rotated_box(pos, size, angle=angle, cos=cos, sin=sin, centered=centered, color=color, filled=False)
+        self.rotated_box(pos, size, angle=angle, cos=cos, sin=sin,
+                         centered=centered, color=color, filled=False)
 
     def arrow(self, pos, size, angle=None, cos=None, sin=None, color=(150, 150, 190)):
         if angle:
             cos, sin = np.cos(angle), np.sin(angle)
-        
+
         self.rotated_box(
             pos,
             size,
@@ -179,7 +184,6 @@ class Window:
             centered=False
         )
 
-
     def draw_axes(self, color=(100, 100, 100)):
         x_start, y_start = self.inverse_convert(0, 0)
         x_end, y_end = self.inverse_convert(self.width, self.height)
@@ -194,7 +198,7 @@ class Window:
             color
         )
 
-    def draw_grid(self, unit=50, color=(150,150,150)):
+    def draw_grid(self, unit=50, color=(150, 150, 150)):
         x_start, y_start = self.inverse_convert(0, 0)
         x_end, y_end = self.inverse_convert(self.width, self.height)
 
@@ -229,11 +233,13 @@ class Window:
             )
 
             # Draw road arrow
-            if road.length > 5: 
+            if road.length > 5:
                 for i in np.arange(-0.5*road.length, 0.5*road.length, 10):
                     pos = (
-                        road.start[0] + (road.length/2 + i + 3) * road.angle_cos,
-                        road.start[1] + (road.length/2 + i + 3) * road.angle_sin
+                        road.start[0] + (road.length/2 + i +
+                                         3) * road.angle_cos,
+                        road.start[1] + (road.length/2 + i +
+                                         3) * road.angle_sin
                     )
 
                     self.arrow(
@@ -244,15 +250,45 @@ class Window:
                     )
 
     def draw_traffic_lights(self):
+        i = 0
         for light in self.sim.lights:
             self.circle(light.position, 4, light.state)
+            self.tfstate[i] = light.state;
+            i += 1
 
     def draw_status(self):
-        text_fps = self.text_font.render(f't={self.sim.t:.5}', False, (0, 0, 0))
-        text_frc = self.text_font.render(f'n={self.sim.frame_count}', False, (0, 0, 0))
-        
+        text_fps = self.text_font.render(
+            f't={self.sim.t:.5}', False, (0, 0, 0))
+        text_frc = self.text_font.render(
+            f'n={self.sim.frame_count}', False, (0, 0, 0))
+
         self.screen.blit(text_fps, (0, 0))
         self.screen.blit(text_frc, (100, 0))
+
+    def checkLights(self, path, currentIndex, position, length):
+        pace = 1/5
+
+        if(path[currentIndex] == 0 and position > length - 50):
+            if (self.tfstate[0] == (255, 255, 0) and position > length - 20):
+                pace = 1/10
+            elif (self.tfstate[0] == (255,0,0) and position > length - 10):
+                pace = 0
+            elif (self.tfstate[0] == (255,0,0) and position > length - 20):
+                pace = 1/15
+            else:
+                pace = 1/5
+    
+        if(path[currentIndex] == 10 and position > length - 50):
+            if (self.tfstate[1] == (255, 255, 0) and position > length - 20):
+                pace = 1/10
+            elif (self.tfstate[1] == (255,0,0) and position > length - 10):
+                pace = 0
+            elif (self.tfstate[1] == (255,0,0) and position > length - 20):
+                pace = 1/15
+            else:
+                pace = 1/5
+        
+        return pace;
 
     def draw(self):
         # Fill background
@@ -264,26 +300,51 @@ class Window:
         # Draw status info
         self.draw_status()
 
-        # path = [1,2,4,5,6,7,8,9,0,3,6,7,10,11]
-        path = [0,3,6,7,10,11]
+        path = [1,2,4,5,6,7,8,9,0,3,6,7,10,11]
+        # path = [0,3,6,7,10,11,4,5,6,7,8,9,1,2]
+        path2 = [0,3,6,7,10,11,4,5,6,7,8,9,1,2]
         longitud = self.sim.roads[path[self.currentIndex]].length
 
-        if(self.pos > longitud):
-            if(path[self.currentIndex] == 0 or path[self.currentIndex] == 10):
-                # self.step_size = 0 #Detiene el Vehículo
-                
-                print('Llegó a la intersección');
+        #Check Traffic Light Color, If its red stop, if its yellow reduce the speed, if its green dont do nothing.
+        self.step_size = self.checkLights(path, self.currentIndex, self.pos, longitud);
+        self.step_size2 = self.checkLights(path2, self.currentIndex2, self.pos2, longitud);
+
+        if(path[self.currentIndex] == path2[self.currentIndex2]):
+            if(self.pos2 > self.pos - 5):
+                self.step_size2 = 0
+            elif(self.pos2 > self.pos - 10):
+                self.step_size2 = 1/20
+            else:
+                self.step_size2 = 1/5
+            
+        #Change Position form to the next street
+        #Blue Car
+        if (self.pos > longitud):
             self.pos = 0
             self.currentIndex += 1
-        
-        sin, cos = self.sim.roads[path[self.currentIndex]].angle_sin, self.sim.roads[path[self.currentIndex]].angle_cos
-        h=2
-        l=2
-        x = self.sim.roads[path[self.currentIndex]].start[0] + cos * self.pos
-        y = self.sim.roads[path[self.currentIndex]].start[1] + sin * self.pos 
 
+        #Red Car
+        if (self.pos2 > longitud):
+            self.pos2 = 0
+            self.currentIndex2 += 1
+
+        #Blue Car
+        sin, cos = self.sim.roads[path[self.currentIndex]].angle_sin, self.sim.roads[path[self.currentIndex]].angle_cos
+        h = 3
+        l = 3
+        x = self.sim.roads[path[self.currentIndex]].start[0] + cos * self.pos
+        y = self.sim.roads[path[self.currentIndex]].start[1] + sin * self.pos
         self.rotated_box((x, y), (l, h), cos=cos, sin=sin, centered=True)
         self.pos = self.pos + self.step_size
+
+        #Red Car
+        sin2, cos2 = self.sim.roads[path2[self.currentIndex2]].angle_sin, self.sim.roads[path2[self.currentIndex2]].angle_cos
+        h = 3
+        l = 3
+        x2 = self.sim.roads[path2[self.currentIndex2]].start[0] + cos2 * self.pos2
+        y2 = self.sim.roads[path2[self.currentIndex2]].start[1] + sin2 * self.pos2
+        self.rotated_box((x2, y2), (l, h), cos=cos2, sin=sin2, centered=True, color=(255, 0, 0))
+        self.pos2 = self.pos2 + self.step_size2
 
 class Simulation:
     def __init__(self, config={}):
@@ -318,7 +379,7 @@ class Simulation:
         # Update every road
         for road in self.roads:
             road.update(self.dt)
-            
+
         for light in self.lights:
             light.update(self.t)
 
@@ -329,6 +390,7 @@ class Simulation:
     def run(self, steps):
         for _ in range(steps):
             self.update()
+
 
 class Road:
     def __init__(self, start, end):
@@ -343,26 +405,26 @@ class Road:
         self.length = distance.euclidean(self.start, self.end)
         self.angle_sin = (self.end[1]-self.start[1]) / self.length
         self.angle_cos = (self.end[0]-self.start[0]) / self.length
-        
 
     def update(self, dt):
         n = len(self.vehicles)
 
 class TrafficLight:
     def __init__(self, position, route):
-        self.cicle = cicles[route] # Actual Cicle
-        self.index = 0 #Index in array
-        self.stateIndex = self.cicle[self.index] #The index on the colors array 
-        self.state = colors[self.stateIndex] # The State's Color
+        self.cicle = cicles[route]  # Actual Cicle
+        self.index = 0  # Index in array
+        # The index on the colors array
+        self.stateIndex = self.cicle[self.index]
+        self.state = colors[self.stateIndex]  # The State's Color
         self.time = 0
         self.position = position
-        
+
     def checkState(self):
-        if(self.time != 0 and self.time % 20 < 0.01666666666674388):
+        if (self.time != 0 and self.time % 20 < 0.01666666666674388):
             self.index += 1
             self.stateIndex = self.cicle[self.index]
             self.state = colors[self.stateIndex]
-            if(self.index == 4):
+            if (self.index == 4):
                 self.index = 0
 
     def getState(self):
@@ -372,36 +434,37 @@ class TrafficLight:
         self.time = t
         self.checkState()
 
+
 cicles = [
-    [0,0,1,2,2], 
-    [2,2,2,0,1]
-] #Posible Cicles 1 - GREEN, 2 - YELLOW, 3 - RED 
-colors = [(0, 255, 0),(255, 255, 0),(255, 0, 0)] #GREEN, YELLOW, RED, RED
+    [0, 0, 1, 2, 2],
+    [2, 2, 2, 0, 1]
+]  # Posible Cicles 1 - GREEN, 2 - YELLOW, 3 - RED
+colors = [(0, 255, 0), (255, 255, 0), (255, 0, 0)]  # GREEN, YELLOW, RED, RED
 sim = Simulation()
 
 # Add multiple roads
 sim.create_roads([
-    ((0,-100), (0,0)),
-    ((0,-100), (100,-100)),
-    ((100,-100), (100,0)),
-    ((0,0),  (0, 100)),
-    ((100,0), (100,100)),
-    ((100,100), (0,100)),
-    ((0,100), (-100,100)),
-    ((-100,100), (-100,0)),
-    ((-100,0), (-100,-100)),
-    ((-100,-100), (0,-100)),
-    ((-100, 0), (0,0)),
-    ((0,0),  (100, 0)),
+    ((0, -100), (0, 0)),
+    ((0, -100), (100, -100)),
+    ((100, -100), (100, 0)),
+    ((0, 0),  (0, 100)),
+    ((100, 0), (100, 100)),
+    ((100, 100), (0, 100)),
+    ((0, 100), (-100, 100)),
+    ((-100, 100), (-100, 0)),
+    ((-100, 0), (-100, -100)),
+    ((-100, -100), (0, -100)),
+    ((-100, 0), (0, 0)),
+    ((0, 0),  (100, 0)),
 ])
 
 # Add multiple traffic lights
 sim.create_traffic_lights([
-    ((300, 290), 0), 
+    ((300, 290), 0),
     ((290, 300), 1)
 ])
 
 # Start simulation
 win = Window(sim)
-win.offset = (0,0)
+win.offset = (0, 0)
 win.run(steps_per_update=5)
